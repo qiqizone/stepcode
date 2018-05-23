@@ -41,7 +41,7 @@
 #define PRIME1           37
 #define PRIME2      1048583
 
-typedef Hash_Entry **Segment;
+typedef Symbol **Segment;
 
 struct Hash_Table_ {
     unsigned int    p;      /**< Next bucket to be split  */
@@ -59,15 +59,11 @@ struct Hash_Table_ {
 #ifndef HASH_TESTING
 
 struct freelist_head HASH_Table_fl;
-struct freelist_head HASH_Entry_fl;
 
 void
 HASHinitialize() {
     if( HASH_Table_fl.size_elt == 0 ) {
         ALLOCinitialize( &HASH_Table_fl, sizeof( struct Hash_Table_ ), 500, 100 );
-    }
-    if( HASH_Entry_fl.size_elt == 0 ) {
-        ALLOCinitialize( &HASH_Entry_fl, sizeof( Hash_Entry ), 2500, 500 );
     }
 }
 #endif
@@ -116,7 +112,7 @@ HASHdestroy(Hash_Table tbl)
     float n, r;
 #endif
     Segment	s;
-    Hash_Entry	*p,*q;
+    Symbol	*p,*q;
 
     assert(tbl != NULL);
 
@@ -161,7 +157,7 @@ HASHdestroy(Hash_Table tbl)
 Hash_Table
 HASHcopy( Hash_Table oldtable ) {
     Hash_Table newtable;
-    Hash_Entry *p, **q;
+    Symbol *p, **q;
     unsigned int i, j;
 
     newtable = HASH_Table_new();
@@ -182,8 +178,8 @@ HASHcopy( Hash_Table oldtable ) {
             p = oldtable->Directory[i][j];
             q = &newtable->Directory[i][j];
             while (p) {
-                *q = HASH_Entry_new();
-                memcpy(*q, p, sizeof(Hash_Entry));
+                *q = SYMBOL_new();
+                memcpy(*q, p, sizeof(Symbol));
                 (*q)->next = NULL;
                 q = &(*q)->next;
                 p = p->next;
@@ -194,17 +190,17 @@ HASHcopy( Hash_Table oldtable ) {
     return newtable;
 }
 
-Hash_Entry *
-HASHsearch(Hash_Table tbl, Hash_Entry item, Action action) {
+Symbol *
+HASHsearch(Hash_Table tbl, Symbol item, Action action) {
     size_t h;
     Segment	CurrentSegment;
     int SegmentIndex;
     int SegmentDir;
-    Hash_Entry **p, *q;
+    Symbol **p, *q;
 
     assert(tbl != NULL);
 
-    h = HASHhash(item.key);
+    h = HASHhash(item.name);
     if (h % tbl->maxp < tbl->p) {
         h %= (tbl->maxp << 1);
     } else {
@@ -221,7 +217,7 @@ HASHsearch(Hash_Table tbl, Hash_Entry item, Action action) {
     q = *p;
 
     /* Follow collision chain */    
-    while (q != NULL && strcmp((char *) q->key, (char *) item.key)) {
+    while (q != NULL && strcmp((char *) q->name, (char *) item.name)) {
         p = &q->next;
         q = *p;
     }
@@ -232,7 +228,7 @@ HASHsearch(Hash_Table tbl, Hash_Entry item, Action action) {
         return NULL;
     
     /* found, not found - search only, alloc or fail */
-    if (q != NULL || action == HASH_FIND || (q = HASH_Entry_new()) == NULL)
+    if (q != NULL || action == HASH_FIND || (q = SYMBOL_new()) == NULL)
         return q;
 
 #ifdef HASH_DEBUG
@@ -242,12 +238,9 @@ HASHsearch(Hash_Table tbl, Hash_Entry item, Action action) {
 #endif
 
     /* link into chain, initialize new element */
-    *p = q; 
-    q->key = item.key;
-    q->data = item.data;
-    /* TODO: check, probably only need one of these */
-    q->symbol = item.symbol;
-    q->type = item.type;
+    *p = q;
+    memcpy(q, &item, sizeof(Symbol));
+    q->next = NULL;
 
     ++tbl->KeyCount;
     
@@ -259,16 +252,16 @@ HASHsearch(Hash_Table tbl, Hash_Entry item, Action action) {
 }
 
 void
-HASHdelete(Hash_Table tbl, Hash_Entry *item) {
+HASHdelete(Hash_Table tbl, Symbol *item) {
     size_t h;
     Segment	CurrentSegment;
     int SegmentIndex;
     int SegmentDir;
-    Hash_Entry **p, *q;
+    Symbol **p, *q;
 
     assert(tbl != NULL);
 
-    h = HASHhash(item->key);
+    h = HASHhash(item->name);
     if (h % tbl->maxp < tbl->p) {
         h %= (tbl->maxp << 1);
     } else {
@@ -285,7 +278,7 @@ HASHdelete(Hash_Table tbl, Hash_Entry *item) {
     q = *p;
 
     /* Follow collision chain */    
-    while (q != NULL && strcmp((char *) q->key, (char *) item->key)) {
+    while (q != NULL && strcmp((char *) q->name, (char *) item->name)) {
         p = &q->next;
         q = *p;
     }
@@ -296,11 +289,10 @@ HASHdelete(Hash_Table tbl, Hash_Entry *item) {
         return;
     
     *p = q->next;
-    item->data = q->data;
-    item->symbol = q->symbol;
-    item->type = q->type;
+    memcpy(item, q, sizeof(Symbol));
+    item->next = NULL;
     tbl->KeyCount--;
-    HASH_Entry_destroy(q);
+    SYMBOL_destroy(q);
 }
 
 
@@ -345,7 +337,7 @@ HASHexpand_table(Hash_Table tbl)
     int OldSegmentIndex, NewSegmentIndex;
     int OldSegmentDir, NewSegmentDir;
     Segment OldSegment, NewSegment, *NewDirectory;
-    Hash_Entry *Current,**Previous,**LastOfNew;
+    Symbol *Current,**Previous,**LastOfNew;
 
     /* check there's enough space for a new bucket, attempt resize */
     if (tbl->maxp + tbl->p >= (tbl->DirectorySize << SEGMENT_WIDTH)) {
@@ -398,7 +390,7 @@ HASHexpand_table(Hash_Table tbl)
         ck++;
 #endif
         /* rehash for a factor 2 increase */
-        h = HASHhash(Current->key) % (tbl->maxp << 1);
+        h = HASHhash(Current->name) % (tbl->maxp << 1);
         if (h == NewAddress) {
             /* Attach it to the end of the new chain */
             *LastOfNew = Current;
@@ -453,9 +445,9 @@ HASHdo_init(Hash_Table tbl, Hash_Iterator *it, char type) {
 }
 
 /* provide a way to step through the hash */
-Hash_Entry *
+Symbol *
 HASHdo( Hash_Iterator * it ) {
-    Hash_Entry *q;
+    Symbol *q;
     int SegmentDir, SegmentIndex;
 
     for (; it->hash < (it->table->maxp + it->table->p); it->hash++) {
