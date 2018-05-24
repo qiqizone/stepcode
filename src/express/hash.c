@@ -232,7 +232,7 @@ HASHsearch(Hash_Table tbl, Symbol item, Action action) {
     q = *p;
 
     /* Follow collision chain */    
-    while (q != NULL && strcmp((char *) q->name, (char *) item.name)) {
+    while (q != NULL && strcasecmp((char *) q->name, (char *) item.name)) {
         p = &q->next;
         q = *p;
     }
@@ -293,7 +293,7 @@ HASHdelete(Hash_Table tbl, Symbol *item) {
     q = *p;
 
     /* Follow collision chain */    
-    while (q != NULL && strcmp((char *) q->name, (char *) item->name)) {
+    while (q != NULL && strcasecmp((char *) q->name, (char *) item->name)) {
         p = &q->next;
         q = *p;
     }
